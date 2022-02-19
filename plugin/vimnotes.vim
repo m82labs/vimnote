@@ -20,9 +20,24 @@ function! InsertDateHeader()
 endfunction
 
 function! CompleteTask()
-    let task = substitute(getline('.'), '^- ', '', '')
+    let curlinepos = getpos('.')[1]
+
+    while matchstr(getline(curlinepos), '- ') != '- '
+        let curlinepos -= 1
+    endwhile
+
+    let topline = curlinepos
+
+    let botline = topline
+    while matchstr(getline(botline+1), '- ') != '- ' && strlen(getline(botline+1)) > 0
+        let botline += 1
+    endwhile
+
+    let task = substitute(getline(topline), '^- ', '', '')
     call writefile([strftime("%Y-%m-%d") . ": " . task], "completed.note", "a")
-    execute "normal dd"
+    call writefile(getline(topline+1,botline), "completed.note", "a")
+
+    execute ":" . topline . "," . botline . "d"
 endfunction
 
 function! NewTask()
