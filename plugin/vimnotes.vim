@@ -28,14 +28,21 @@ function! CompleteTask()
 
     let topline = curlinepos
 
+    let target = tolower(substitute(matchstr(getline(topline), '\[.*\]'),'[][]','','g'))
+    if len(target) == 0
+        let target = 'completed'
+    endif
+
+    echo "Writing task to: " . target . ".note..."
+
     let botline = topline
     while matchstr(getline(botline+1), '- ') != '- ' && strlen(getline(botline+1)) > 0
         let botline += 1
     endwhile
 
     let task = substitute(getline(topline), '^- ', '', '')
-    call writefile([strftime("%Y-%m-%d") . ": " . task], "completed.note", "a")
-    call writefile(getline(topline+1,botline), "completed.note", "a")
+    call writefile([strftime("%Y-%m-%d") . ": " . task], target . ".note", "a")
+    call writefile(getline(topline+1,botline), target . ".note", "a")
 
     execute ":" . topline . "," . botline . "d"
 endfunction
