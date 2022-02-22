@@ -10,8 +10,23 @@ augroup vimnotes
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>l :<c-u>call OpenNoteLink()<cr>
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>d :<c-u>call InsertDateHeader()<cr>
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>c :<c-u>call CompleteTask()<cr>
-    autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>n :<c-u>call NewTask()<cr>i- 
+    autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>n :<c-u>call NewTask()<cr>i-
+    autocmd InsertLeave *.note call ProcessTask() 
 augroup END
+
+function! GetTaskBoundaries(start)
+    while matchstr(getline(a:start), '^- ') != '- '
+        let a:start -= 1
+    endwhile
+
+    let topline = a:start
+
+    let botline = topline
+    while matchstr(getline(botline+1), '^- ') != '- ' && strlen(getline(botline+1)) > 0
+        let botline += 1
+    endwhile
+    return [topline, botline]
+endfunction
 
 function! InsertDateHeader()
     let currdate = strftime("%Y-%m-%d")
@@ -20,31 +35,20 @@ function! InsertDateHeader()
 endfunction
 
 function! CompleteTask()
-    let curlinepos = getpos('.')[1]
+    let taskb = GetTaskBoundaries(getpos('.')[1])
 
-    while matchstr(getline(curlinepos), '- ') != '- '
-        let curlinepos -= 1
-    endwhile
-
-    let topline = curlinepos
-
-    let target = tolower(substitute(matchstr(getline(topline), '\[.*\]'),'[][]','','g'))
+    let target = tolower(substitute(matchstr(getline(taskb[0]), '- \[.*\]'),'[][\- ]','','g'))
     if len(target) == 0
         let target = 'completed'
     endif
 
     echo "Writing task to: " . target . ".note..."
 
-    let botline = topline
-    while matchstr(getline(botline+1), '- ') != '- ' && strlen(getline(botline+1)) > 0
-        let botline += 1
-    endwhile
-
-    let task = substitute(getline(topline), '^- ', '', '')
+    let task = substitute(getline(taskb[0]), '^- ', '', '')
     call writefile([strftime("%Y-%m-%d") . ": " . task], target . ".note", "a")
-    call writefile(getline(topline+1,botline), target . ".note", "a")
+    call writefile(getline(taskb[0]+1,taskb[1]), target . ".note", "a")
 
-    execute ":" . topline . "," . botline . "d"
+    execute ":" . taskb[0] . "," . taskb[1] . "d"
 endfunction
 
 function! NewTask()
@@ -83,4 +87,17 @@ function! OpenNoteLink()
     else
 	    call setpos('.', [0, 4, 0, 0])
     endif
+endfunction
+
+function! ProcessTask()
+    "General purpose function that gets called whenever leaving edit mode
+    let taskb = GetTaskBoundaries(getpos('.')[1])
+    for tline in range(taskb[0], taskb[1])
+        let m = matchstr(getline(tline),'>> [0-9]\{8}$')
+        if len(m)
+            " Move to reminder file
+            echo "Found: " . m 
+            break
+        endif
+    endfor
 endfunction
