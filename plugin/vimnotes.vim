@@ -11,10 +11,9 @@ augroup vimnotes
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>d :<c-u>call InsertDateHeader()<cr>
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>c :<c-u>call CompleteTask()<cr>
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>n :<c-u>call NewTask()<cr>i-
-    autocmd InsertLeave *.note call ProcessTask() 
 augroup END
 
-function! GetTaskBoundaries(start)
+function! GetTask(start)
     while matchstr(getline(a:start), '^- ') != '- '
         let a:start -= 1
     endwhile
@@ -25,7 +24,7 @@ function! GetTaskBoundaries(start)
     while matchstr(getline(botline+1), '^- ') != '- ' && strlen(getline(botline+1)) > 0
         let botline += 1
     endwhile
-    return [topline, botline]
+    return [getline(topline, botline),[topline, botline]]
 endfunction
 
 function! InsertDateHeader()
@@ -35,20 +34,33 @@ function! InsertDateHeader()
 endfunction
 
 function! CompleteTask()
-    let taskb = GetTaskBoundaries(getpos('.')[1])
+    let task_data = GetTask(getpos('.')[1])
+    let task = task_data[0]
+    let taskp = task_data[1]
 
-    let target = tolower(substitute(matchstr(getline(taskb[0]), '- \[.*\]'),'[][\- ]','','g'))
-    if len(target) == 0
-        let target = 'completed'
+    "See if this is a reminder
+    if match(task[-1],'>> [0-9]\{8}$') > -1
+        let target = 'reminders'
+        let remind_date = matchstr(task[-1],'[0-9]\{8}$')
+        let task[-1] = substitute(task[-1],'>> [0-9]\{8}','','') . ":" . remind_date
+    else 
+        "See if it is a named list
+        let target = tolower(substitute(matchstr(task[0]), '- \[.*\]'),'[][\- ]','','g'))
+        if len(target) == 0
+            "If none of the above, it's just a standard task
+            let target = 'completed'
+        endif
     endif
 
     echo "Writing task to: " . target . ".note..."
 
-    let task = substitute(getline(taskb[0]), '^- ', '', '')
-    call writefile([strftime("%Y-%m-%d") . ": " . task], target . ".note", "a")
-    call writefile(getline(taskb[0]+1,taskb[1]), target . ".note", "a")
+    let task[0] = substitute(task[0], '^- ', '', '')
+    call writefile([strftime("%Y-%m-%d") . ": " . task[0]], target . ".note", "a")
+    if len(task) > 1
+        call writefile(task[1:-1]), target . ".note", "a")
+    endif
 
-    execute ":" . taskb[0] . "," . taskb[1] . "d"
+    execute ":" . taskp[0] . "," . taskp[1] . "d"
 endfunction
 
 function! NewTask()
@@ -89,15 +101,7 @@ function! OpenNoteLink()
     endif
 endfunction
 
-function! ProcessTask()
-    "General purpose function that gets called whenever leaving edit mode
-    let taskb = GetTaskBoundaries(getpos('.')[1])
-    for tline in range(taskb[0], taskb[1])
-        let m = matchstr(getline(tline),'>> [0-9]\{8}$')
-        if len(m)
-            " Move to reminder file
-            echo "Found: " . m 
-            break
-        endif
-    endfor
+function! PopReminder()
+    "Find and pop valid reminders off the reminder file and into the todo.note
+    
 endfunction
