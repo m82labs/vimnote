@@ -4,7 +4,7 @@ augroup vimnotes
     autocmd BufRead,BufNewFile *.note hi nlink
         \ guifg=black guibg=green
         \ ctermfg=black ctermbg=green
-    autocmd BufRead,BufNewFile *.note syn match nlink "{[a-z].*}"
+    autocmd BufRead,BufNewFile *.note syn match nlink "{[a-z_]*}"
 
     "Buffer local bindings for special commands
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>l :<c-u>call OpenNoteLink()<cr>
@@ -14,11 +14,12 @@ augroup vimnotes
 augroup END
 
 function! GetTask(start)
-    while matchstr(getline(a:start), '^- ') != '- '
-        let a:start -= 1
+    let startline = copy(a:start)
+    while matchstr(getline(startline), '^- ') != '- '
+        let startline -= 1
     endwhile
 
-    let topline = a:start
+    let topline = startline
 
     let botline = topline
     while matchstr(getline(botline+1), '^- ') != '- ' && strlen(getline(botline+1)) > 0
@@ -43,9 +44,10 @@ function! CompleteTask()
         let target = 'reminders'
         let remind_date = matchstr(task[-1],'[0-9]\{8}$')
         let task[-1] = substitute(task[-1],'>> [0-9]\{8}','','') . ":" . remind_date
-    else 
+    else
+        let task[0] = strftime("%Y-%m-%d") . ": " . task[0] 
         "See if it is a named list
-        let target = tolower(substitute(matchstr(task[0]), '- \[.*\]'),'[][\- ]','','g'))
+        let target = tolower(substitute(matchstr(task[0], '- \[.*\]'),'[][\- ]','','g'))
         if len(target) == 0
             "If none of the above, it's just a standard task
             let target = 'completed'
@@ -55,10 +57,7 @@ function! CompleteTask()
     echo "Writing task to: " . target . ".note..."
 
     let task[0] = substitute(task[0], '^- ', '', '')
-    call writefile([strftime("%Y-%m-%d") . ": " . task[0]], target . ".note", "a")
-    if len(task) > 1
-        call writefile(task[1:-1]), target . ".note", "a")
-    endif
+    call writefile(task, target . ".note", "a")
 
     execute ":" . taskp[0] . "," . taskp[1] . "d"
 endfunction
@@ -103,5 +102,35 @@ endfunction
 
 function! PopReminder()
     "Find and pop valid reminders off the reminder file and into the todo.note
-    
+    let lines = readfile('reminders.note')
+    let currdate = strftime("%Y%m%d")
+    let cur_pos = getpos('.')
+   
+    let lines_d = mapnew(lines, '[v:key, matchstr(v:val, ''[0-9]\{8}$'')]') 
+    call filter(lines_d, 'v:val[1] <= ''' . currdate . '''')
+    "At this point 'lines' contains a list of lines with matching reminders
+    "Now we loop through them and transfer them to todo
+    "First we find the line in the todo buffer with the word "REMINDERS"
+    if len(lines_d) > 0
+        let rline = []
+        execute ":silent g/##REMINDERS##/call add(rline, line('.'))"
+        
+        if len(rline) == 0
+            execute "normal! Go"
+            call append('.','##REMINDERS##')
+            execute "normal! G"
+        else
+            execute ":" . rline[-1]
+        endif
+
+        for line in lines_d
+            call append('.',lines[line[0]])
+            execute "normal! G"
+        endfor
+
+        execute ":" . cur_pos[1]
+        execute "normal! " . cur_pos[2]-1 . "l"
+
+        " Remove lines from reminders file
+    endif
 endfunction
