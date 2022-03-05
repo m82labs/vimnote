@@ -11,6 +11,7 @@ augroup vimnotes
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>d :<c-u>call InsertDateHeader()<cr>
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>c :<c-u>call CompleteTask()<cr>
     autocmd BufRead,BufNewFile *.note noremap <buffer> <leader>n :<c-u>call NewTask()<cr>i-
+    autocmd FocusGained todo.note :call PopReminder()
 augroup END
 
 function! GetTask(start)
@@ -64,20 +65,37 @@ endfunction
 
 function! NewTask()
     execute "normal gg<cr>"
-    let currdate = strftime("%Y-%m-%d")
+    let currdate = strftime("::%Y-%m-%d::")
     let result = search('^' . currdate . '$', "c")
     execute "normal :nohlsearch<cr>"
     execute "normal G<cr>"
     
-    if result == 0
-        call append('.', "")
-        execute "normal G<cr>"
-        call append('.', currdate)
-        execute "normal G<cr>"
-        call append('.',"----------")
+    " First check for a reminders block
+    let rline = []
+    execute ":silent g/## REMINDERS ##/call add(rline, line('.'))"
 
+    if result == 0
+        " If we didn't find the date, add a new block
+        " If we found a reminders block, set our cursor above it
+        if len(rline) != 0
+            call setpos('.',[0,rline[-1]-1,0,0])
+        endif
+        call append('.', "")
+        call append('.', "")
+        call append('.',"--------------")
+        call append('.', currdate)
+        call setpos('.',[0,getpos('.')[1]+3,0,0])
+    else
+        if len(rline) != 0
+            call setpos('.',[0,rline[-1]-1,0,0])
+            call append('.', "")
+        else
+            execute "normal G<cr>"
+        endif
     endif
-    execute "normal G<cr>"
+
+    
+
     let w = strwidth(getline('.'))
     if w > 0
         execute "normal o"
@@ -113,11 +131,11 @@ function! PopReminder()
     "First we find the line in the todo buffer with the word "REMINDERS"
     if len(lines_d) > 0
         let rline = []
-        execute ":silent g/##REMINDERS##/call add(rline, line('.'))"
+        execute ":silent g/## REMINDERS ##/call add(rline, line('.'))"
         
         if len(rline) == 0
             execute "normal! Go"
-            call append('.','##REMINDERS##')
+            call append('.','## REMINDERS ##')
             execute "normal! G"
         else
             execute ":" . rline[-1]
@@ -125,6 +143,7 @@ function! PopReminder()
 
         for line in lines_d
             call append('.',lines[line[0]])
+            let lines[line[0]] = ''
             execute "normal! G"
         endfor
 
@@ -132,5 +151,7 @@ function! PopReminder()
         execute "normal! " . cur_pos[2]-1 . "l"
 
         " Remove lines from reminders file
+        call filter(lines, 'v:val != ""')
+        call writefile(lines, 'reminders.note', 's')
     endif
 endfunction
